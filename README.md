@@ -5,6 +5,6 @@
 ## Quick start
 
 ```console
-make
-./build/brasm examples/example.txt
+$ make
+$ ./build/brasm examples/example.txt
 ```
