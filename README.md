@@ -4,7 +4,7 @@
 
 ## Quick start
 
-```console
+```bash
 $ make
 $ ./build/brasm examples/example.txt
 ```
