@@ -4,13 +4,33 @@ section .data
     file_not_exists_error db 'File does not exist.', 0
     newline db 10
 
-
 section .bss
     buffer resb buffer_size
 
 section .text
     global _start
 
+write_newline:
+    ;; Inputs:
+    ;; - rdi: File descriptor
+    
+    mov rsi, newline                       ; Newline ASCII code
+    mov rdx, 1                             ; Length of the newline character
+    mov rax, 1                             ; Syscall number for write
+    syscall
+    ret
+    
+    
+write_message:
+    ;; Inputs:
+    ;; - rdi: File descriptor
+    ;; - rsi: Pointer to error message
+    ;; - rdx: Length of error message
+    
+    mov rax, 1                  ; Syscall number for write
+    syscall
+    ret
+    
 _start:
     ;; Check to see that there are at least two command line arguments
     mov rdi, [rsp]              ; argc
@@ -44,8 +64,7 @@ _start:
     mov rdi, 1                  ; File descriptor for stdout
     mov rsi, buffer
     mov rdx, buffer_size
-    mov rax, 1                  ; Syscall number for sys_write
-    syscall
+    call write_message
 
     ;; Close the file
     mov rdi, r8                 ; File descriptor
@@ -56,37 +75,21 @@ _start:
     
 .no_argument_error:
     ;; Print the error to stderr
-    mov rdi, 2                             ; File descriptor for stderr
-    mov rsi, no_argument_error             ; Error message to write
-    mov rdx, 28                            ; Length of the error message
-    mov rax, 1                             ; Syscall number for sys_write
-    syscall
-
-    ;; Print newline character to stderr
-    mov rdi, 2                             ; file descriptor for stderr
-    mov rsi, newline                       ; Newline ASCII code
-    mov rdx, 1                             ; Length of the newline character
-    mov rax, 1                             ; Syscall number for sys_write
-    syscall
-
-    call exit_failure
+    mov rdi, 2                  ; stderr
+    mov rsi, no_argument_error  ; Error message to write
+    mov rdx, 28                 ; Length of the error message
+    call write_message
+    call write_newline
+    jmp exit_failure
     
 .file_not_exists_error:
     ;; Print the error to stderr
-    mov rdi, 2                             ; File descriptor for stderr
-    mov rsi, file_not_exists_error         ; Error message to write
-    mov rdx, 20                            ; Length of the error message
-    mov rax, 1                             ; Syscall number for sys_write
-    syscall
-
-    ;; Print newline character to stderr
-    mov rdi, 2                             ; file descriptor for stderr
-    mov rsi, newline                       ; Newline ASCII code
-    mov rdx, 1                             ; Length of the newline character
-    mov rax, 1                             ; Syscall number for sys_write
-    syscall
-
-    call exit_failure
+    mov rdi, 2                     ; stderr
+    mov rsi, file_not_exists_error ; Error message to write
+    mov rdx, 20                    ; Length of the error message
+    call write_message
+    call write_newline
+    jmp exit_failure
     
     
 exit_success:
