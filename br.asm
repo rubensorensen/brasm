@@ -12,12 +12,19 @@
 %define STDOUT 1
 %define STDERR 2
 
+%define argc [rsp]
+%define argv(n) [rsp + 8 + 8*n]
+
 section .data
     buffer_size equ 4096
     no_argument_error db 'Error: No filename provided.', 0
     no_argument_error_len equ $ - no_argument_error
     file_not_exists_error db 'File does not exist.', 0
     file_not_exists_error_len equ $ - file_not_exists_error
+    usage_first db 'usage: ', 0
+    usage_first_len equ $ - usage_first
+    usage_last db 'filename', 0
+    usage_last_len equ $ - usage_last
     newline db 10
 
 section .bss
@@ -25,27 +32,6 @@ section .bss
 
 section .text
     global _start
-
-write_newline:
-    ;; Inputs:
-    ;; - rdi: File descriptor
-    
-    mov rsi, newline            ; ASCII code for newline
-    mov rdx, 1                  ; Length of the newline character
-    mov rax, SYSWRITE
-    syscall
-    ret
-    
-    
-write_message:
-    ;; Inputs:
-    ;; - rdi: File descriptor
-    ;; - rsi: Pointer to error message
-    ;; - rdx: Length of error message
-    
-    mov rax, SYSWRITE
-    syscall
-    ret
     
 exit_success:
     mov rdi, EXITSUCCESS
@@ -57,18 +43,38 @@ exit_failure:
 
 exit:
     ;; Inputs:
-    ;; - rdi: exit code
+    ;; - rdi: Exit code
     mov rax, SYSEXIT
     syscall
+
+write_newline:
+    ;; Inputs:
+    ;; - rdi: File descriptor
+    
+    mov rsi, newline            ; ASCII code for newline
+    mov rdx, 1                  ; Length of the newline character
+    mov rax, SYSWRITE
+    syscall
+    ret
+    
+write_message:
+    ;; Inputs:
+    ;; - rdi: File descriptor
+    ;; - rsi: Pointer to message
+    ;; - rdx: Length of message
+    
+    mov rax, SYSWRITE
+    syscall
+    ret
     
 _start:
     ;; Check to see that there are at least two command line arguments
-    mov rdi, [rsp]              ; argc
+    mov rdi, argc
     cmp rdi, 2                  ; Check if argc is at least 2
     jl .no_argument_error
-
+    
     ;; Check that file exists and is readable
-    mov rdi, [rsp + 16]       ; Filename provided in argv[1]
+    mov rdi, argv(1)
     mov rsi, 0                ; F_OK
     mov rax, SYSACCESS
     syscall
@@ -119,5 +125,19 @@ _start:
     mov rdx, file_not_exists_error_len
     call write_message
     call write_newline
-    jmp exit_failure
-    
+    jmp exit_failure    
+
+get_string_length:
+    ;; Input:
+    ;; - rdi: Pointer to string
+    ;; Output:
+    ;; - rax: String length
+    xor rax, rax                ; Initialize length to 0
+.find_length_loop:
+    cmp byte [rdi], 0           ; Check for null terminator
+    je  .found_length            ; If null terminator, exit the loop
+    inc rdi                     ; Move to the next character
+    inc rax                     ; Increment the length
+    jmp .find_length_loop
+.found_length:
+    ret
