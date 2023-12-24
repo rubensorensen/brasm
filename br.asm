@@ -23,7 +23,7 @@ section .data
     file_not_exists_error_len equ $ - file_not_exists_error
     usage_first db 'usage: ', 0
     usage_first_len equ $ - usage_first
-    usage_last db 'filename', 0
+    usage_last db ' filename', 0
     usage_last_len equ $ - usage_last
     newline db 10
 
@@ -66,6 +66,52 @@ write_message:
     mov rax, SYSWRITE
     syscall
     ret
+    
+usage_stdout:
+    ;; Print usage string
+    mov rdi, STDERR
+    mov rsi, usage_first
+    mov rdx, usage_first_len
+    call write_message
+    
+    mov rdi, [rsp + 8]
+    call get_string_length
+    mov rdx, rax
+    mov rdi, STDERR
+    mov rsi, [rsp + 8]
+    call write_message
+
+    mov rdi, STDERR
+    mov rsi, usage_last
+    mov rdx, usage_last_len
+    call write_message
+
+    mov rdi, STDERR
+    call write_newline
+    jmp exit_failure
+    
+usage_stderr:
+    ;; Print usage string
+    mov rdi, STDERR
+    mov rsi, usage_first
+    mov rdx, usage_first_len
+    call write_message
+    
+    mov rdi, [rsp + 8]
+    call get_string_length
+    mov rdx, rax
+    mov rdi, STDERR
+    mov rsi, [rsp + 8]
+    call write_message
+
+    mov rdi, STDERR
+    mov rsi, usage_last
+    mov rdx, usage_last_len
+    call write_message
+
+    mov rdi, STDERR
+    call write_newline
+    jmp exit_failure
     
 _start:
     ;; Check to see that there are at least two command line arguments
@@ -110,13 +156,14 @@ _start:
     call exit_success
     
 .no_argument_error:
-    ;; Print the error to stderr
+    ;; Print the error to stderr    
     mov rdi, STDERR
     mov rsi, no_argument_error
     mov rdx, no_argument_error_len
     call write_message
     call write_newline
-    jmp exit_failure
+
+    jmp usage_stderr
     
 .file_not_exists_error:
     ;; Print the error to stderr
