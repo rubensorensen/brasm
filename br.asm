@@ -12,22 +12,28 @@
 %define STDOUT 1
 %define STDERR 2
 
+section .bss
+    file_buffer resb file_buffer_size
+    runtime_buffer resb runtime_buffer_size
+
 section .data
-    buffer_size equ 4096
+    runtime_buffer_size equ (30 * 1024)
+    file_buffer_size equ (10 * 1024)
+    
     no_argument_error db "Error: No filename provided.", 0
     no_argument_error_len equ $ - no_argument_error
-    file_not_exists_error_first db "Error: File '", 0
+    
+    file_not_exists_error_first db "Error: '", 0
     file_not_exists_error_first_len equ $ - file_not_exists_error_first
-    file_not_exists_error_last db "' does not exist.", 0
+    file_not_exists_error_last db "' is not a readable file.", 0
     file_not_exists_error_last_len equ $ - file_not_exists_error_last
+    
     usage_first db "usage: ", 0
     usage_first_len equ $ - usage_first
     usage_last db " filename", 0
     usage_last_len equ $ - usage_last
+    
     newline db 10
-
-section .bss
-    buffer resb buffer_size
 
 section .text
     global _start
@@ -43,6 +49,7 @@ exit_failure:
 exit:
     ;; Inputs:
     ;; - rdi: Exit code
+    
     mov rax, SYSEXIT
     syscall
 
@@ -71,6 +78,7 @@ get_string_length:
     ;; - rsi: Pointer to string
     ;; Output:
     ;; - rax: String length
+    
     xor rax, rax                ; Initialize length to 0
 .find_length_loop:
     cmp byte [rsi], 0           ; Check for null terminator
@@ -118,16 +126,28 @@ _start:
 
     ;; Read from the file
     mov rdi, r11                 ; File descriptor
-    mov rsi, buffer
-    mov rdx, buffer_size
+    mov rsi, file_buffer
+    mov rdx, file_buffer_size
     mov rax, SYSREAD            ; Syscall number for sys_read
     syscall
 
-    ;; Write to stdout
+    mov rsi, file_buffer
+.processing_loop:
+    cmp byte [rsi], 0
+    je .processed_all
+
+    push rsi
+    
     mov rdi, STDOUT             ; File descriptor for stdout
-    mov rsi, buffer
-    mov rdx, buffer_size
+    ;; mov rsi, file_buffer
+    mov rdx, 1
     call write_message
+    ;; call write_newline
+    
+    pop rsi
+    inc rsi
+    jmp .processing_loop
+.processed_all:
 
     ;; Close the file
     mov rdi, r11                 ; File descriptor
@@ -179,6 +199,7 @@ _start:
     ;;
     ;; Inputs:
     ;; - rdi: file descriptor
+    
     mov rsi, usage_first
     mov rdx, usage_first_len
     call write_message
