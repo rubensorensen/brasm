@@ -19,7 +19,7 @@ section .data
     buffer_size equ 4096
     no_argument_error db 'Error: No filename provided.', 0
     no_argument_error_len equ $ - no_argument_error
-    file_not_exists_error db 'File does not exist.', 0
+    file_not_exists_error db 'Error: File does not exist.', 0
     file_not_exists_error_len equ $ - file_not_exists_error
     usage_first db 'usage: ', 0
     usage_first_len equ $ - usage_first
@@ -60,34 +60,49 @@ write_newline:
 write_message:
     ;; Inputs:
     ;; - rdi: File descriptor
-    ;; - rsi: Pointer to message
-    ;; - rdx: Length of message
+    ;; - rsi: Pointer to message string
+    ;; - rdx: Length of message string
     
     mov rax, SYSWRITE
     syscall
     ret
-        
+
+get_string_length:
+    ;; Input:
+    ;; - rsi: Pointer to string
+    ;; Output:
+    ;; - rax: String length
+    xor rax, rax                ; Initialize length to 0
+.find_length_loop:
+    cmp byte [rsi], 0           ; Check for null terminator
+    je  .found_length            ; If null terminator, exit the loop
+    inc rsi                     ; Move to the next character
+    inc rax                     ; Increment the length
+    jmp .find_length_loop
+.found_length:
+    ret
+    
 _start:
-    mov r8, [rsp]               ; Store argc
+    mov r12, [rsp]               ; Store argc
     
     add rsp, 8                  ; Nest arg
-    mov r9, [rsp]               ; Store argv[0]
+    mov r13, [rsp]               ; Store argv[0]
     
     ;; Check to see that there are at least two command line arguments
-    mov rdi, r8
+    mov rdi, r12
     cmp rdi, 2                 ; Check if argc is at least 2
     jl .no_argument_error
     
     add rsp, 8                  ; Next arg
-    mov r10, [rsp]              ; Store argv[1]
+    mov r14, [rsp]              ; Store argv[1]
 
-    
-    ;; r8  : argc
-    ;; r9  : program name
-    ;; r10 : brainfuck file name
+    ;; Persistent registers
+    ;; r12  : argc
+    ;; r13  : program name
+    ;; r14 : brainfuck file name
     
     ;; Check that file exists and is readable
-    mov rdi, r10
+    mov rdi, r14
     mov rsi, 0                ; F_OK
     mov rax, SYSACCESS
     syscall
@@ -95,7 +110,7 @@ _start:
     jne .file_not_exists_error   ; Jump to error handling if file doesn't exist
     
     ;; Open the file
-    mov rdi, r10         ; Filename provided in argv[1]
+    mov rdi, r14         ; Filename provided in argv[1]
     mov rsi, 0                  ; O_RDONLY
     mov rdx, 0                  ; Mode is ignored when opening an existing file
     mov rax, SYSOPEN            ; Syscall number for sys_open
@@ -123,32 +138,12 @@ _start:
     call exit_success
     
 .no_argument_error:
-    ;; Print usage
+    ;; Write  usage string to stderr
     mov rdi, STDERR
-    mov rsi, usage_first
-    mov rdx, usage_first_len
-    call write_message
-    
-    mov rdi, r9
-    call get_string_length
-    mov rdx, rax
-    mov rdi, STDERR
-    mov rsi, r9
-    call write_message
-
-    mov rdi, STDERR
-    mov rsi, usage_last
-    mov rdx, usage_last_len
-    call write_message
-
-    mov rdi, STDERR
-    call write_newline
-
-    mov rdi, STDERR
+    call .usage
     call write_newline
     
-    ;; Print the error
-    mov rdi, STDERR
+    ;; Write error to stderr
     mov rsi, no_argument_error
     mov rdx, no_argument_error_len
     call write_message
@@ -159,23 +154,35 @@ _start:
 .file_not_exists_error:
     ;; Print the error to stderr
     mov rdi, STDERR
+    call .usage
+    call write_newline
+    
     mov rsi, file_not_exists_error
     mov rdx, file_not_exists_error_len
     call write_message
     call write_newline
+    
     jmp exit_failure    
 
-get_string_length:
-    ;; Input:
-    ;; - rdi: Pointer to string
-    ;; Output:
-    ;; - rax: String length
-    xor rax, rax                ; Initialize length to 0
-.find_length_loop:
-    cmp byte [rdi], 0           ; Check for null terminator
-    je  .found_length            ; If null terminator, exit the loop
-    inc rdi                     ; Move to the next character
-    inc rax                     ; Increment the length
-    jmp .find_length_loop
-.found_length:
+.usage:
+    ;; Write usage string to file descriptor
+    ;;
+    ;; Inputs:
+    ;; - rdi: file descriptor
+    mov rsi, usage_first
+    mov rdx, usage_first_len
+    call write_message
+    
+    mov rsi, r13
+    call get_string_length
+    mov rdx, rax
+    mov rsi, r13
+    call write_message
+
+    mov rsi, usage_last
+    mov rdx, usage_last_len
+    call write_message
+
+    call write_newline
+
     ret
