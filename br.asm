@@ -1,9 +1,12 @@
-%define SYSREAD    0
-%define SYSWRITE   1
-%define SYSOPEN    2
-%define SYSCLOSE   3
-%define SYSACCESS 21
-%define SYSEXIT   60
+%define SYSREAD     0
+%define SYSWRITE    1
+%define SYSOPEN     2
+%define SYSCLOSE    3
+%define SYSLSEEK    8
+%define SYSMMAP     9
+%define SYSMUNMAP  11
+%define SYSACCESS  21
+%define SYSEXIT    60
 
 %define EXITSUCCESS 0
 %define EXITFAILURE 1
@@ -11,14 +14,12 @@
 %define STDIN  0
 %define STDOUT 1
 %define STDERR 2
-
+    
 section .bss
-    file_buffer resb file_buffer_size
-    runtime_buffer resb runtime_buffer_size
+    buffer resb buffer_size
 
 section .data
-    runtime_buffer_size equ (30 * 1024)
-    file_buffer_size equ (10 * 1024)
+    buffer_size equ (10 * 1024)
     
     no_argument_error db "Error: No filename provided.", 0
     no_argument_error_len equ $ - no_argument_error
@@ -38,21 +39,6 @@ section .data
 section .text
     global _start
     
-exit_success:
-    mov rdi, EXITSUCCESS
-    jmp exit
-
-exit_failure:
-    mov rdi, EXITFAILURE
-    jmp exit
-
-exit:
-    ;; Inputs:
-    ;; - rdi: Exit code
-    
-    mov rax, SYSEXIT
-    syscall
-
 write_newline:
     ;; Inputs:
     ;; - rdi: File descriptor
@@ -103,9 +89,6 @@ _start:
     add rsp, 8                  ; Next arg
     mov r14, [rsp]              ; Store argv[1]
 
-    ;; Persistent registers
-    ;; r12 : argc
-    ;; r13 : program name
     ;; r14 : brainfuck file name
     
     ;; Check that file exists and is readable
@@ -115,23 +98,31 @@ _start:
     syscall
     cmp rax, 0                   ; Check if sys_open failed
     jne .file_not_exists_error   ; Jump to error handling if file doesn't exist
-    
+
     ;; Open the file
     mov rdi, r14         ; Filename provided in argv[1]
     mov rsi, 0                  ; O_RDONLY
     mov rdx, 0                  ; Mode is ignored when opening an existing file
     mov rax, SYSOPEN            ; Syscall number for sys_open
     syscall
+    cmp rax, -1
+    je .file_not_exists_error
     mov r11, rax                 ; Save file descriptor
 
-    ;; Read from the file
-    mov rdi, r11                 ; File descriptor
-    mov rsi, file_buffer
-    mov rdx, file_buffer_size
-    mov rax, SYSREAD            ; Syscall number for sys_read
+    ;; Map file
+    mov r8, r11     ; File descriptor
+    mov rdi, 0      ; OS will choose mapping destination
+    mov rsi, 4096   ; Page size
+    mov rdx, 0x1    ; PROT_READ
+    mov r10, 0x2    ; MAP_PRIVATE
+    mov r9, 0       ; Offset into file
+    mov rax, SYSMMAP          
     syscall
+    cmp rax, -1
+    je .exit_failure
+    mov r13, rax                ; File buffer in r13
 
-    mov rsi, file_buffer
+    mov rsi, r13
 .processing_loop:
     cmp byte [rsi], 0
     je .processed_all
@@ -149,12 +140,18 @@ _start:
     jmp .processing_loop
 .processed_all:
 
+    ;; Deallocate buffer
+    mov rdi, r13
+    mov rsi, 4096
+    mov rax, SYSMUNMAP
+    syscall
+    
     ;; Close the file
     mov rdi, r11                 ; File descriptor
     mov rax, SYSCLOSE           ; Syscall number for sys_close
     syscall
 
-    call exit_success
+    jmp .exit_success
     
 .no_argument_error:
     ;; Write  usage string to stderr
@@ -168,7 +165,7 @@ _start:
     call write_message
     call write_newline
 
-    jmp exit_failure
+    jmp .exit_failure
         
 .file_not_exists_error:
     ;; Print the error to stderr
@@ -192,7 +189,7 @@ _start:
     
     call write_newline
     
-    jmp exit_failure    
+    jmp .exit_failure    
 
 .usage:
     ;; Write usage string to file descriptor
@@ -217,3 +214,18 @@ _start:
     call write_newline
 
     ret
+    
+.exit_success:
+    mov rdi, EXITSUCCESS
+    jmp .exit
+
+.exit_failure:
+    mov rdi, EXITFAILURE
+    jmp .exit
+
+.exit:
+    ;; Inputs:
+    ;; - rdi: Exit code
+    
+    mov rax, SYSEXIT
+    syscall
