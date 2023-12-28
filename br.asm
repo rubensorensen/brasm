@@ -66,61 +66,28 @@ write_message:
     mov rax, SYSWRITE
     syscall
     ret
-    
-usage_stdout:
-    ;; Print usage string
-    mov rdi, STDERR
-    mov rsi, usage_first
-    mov rdx, usage_first_len
-    call write_message
-    
-    mov rdi, [rsp + 8]
-    call get_string_length
-    mov rdx, rax
-    mov rdi, STDERR
-    mov rsi, [rsp + 8]
-    call write_message
-
-    mov rdi, STDERR
-    mov rsi, usage_last
-    mov rdx, usage_last_len
-    call write_message
-
-    mov rdi, STDERR
-    call write_newline
-    jmp exit_failure
-    
-usage_stderr:
-    ;; Print usage string
-    mov rdi, STDERR
-    mov rsi, usage_first
-    mov rdx, usage_first_len
-    call write_message
-    
-    mov rdi, [rsp + 8]
-    call get_string_length
-    mov rdx, rax
-    mov rdi, STDERR
-    mov rsi, [rsp + 8]
-    call write_message
-
-    mov rdi, STDERR
-    mov rsi, usage_last
-    mov rdx, usage_last_len
-    call write_message
-
-    mov rdi, STDERR
-    call write_newline
-    jmp exit_failure
-    
+        
 _start:
+    mov r8, [rsp]               ; Store argc
+    
+    add rsp, 8                  ; Nest arg
+    mov r9, [rsp]               ; Store argv[0]
+    
     ;; Check to see that there are at least two command line arguments
-    mov rdi, argc
-    cmp rdi, 2                  ; Check if argc is at least 2
+    mov rdi, r8
+    cmp rdi, 2                 ; Check if argc is at least 2
     jl .no_argument_error
     
+    add rsp, 8                  ; Next arg
+    mov r10, [rsp]              ; Store argv[1]
+
+    
+    ;; r8  : argc
+    ;; r9  : program name
+    ;; r10 : brainfuck file name
+    
     ;; Check that file exists and is readable
-    mov rdi, argv(1)
+    mov rdi, r10
     mov rsi, 0                ; F_OK
     mov rax, SYSACCESS
     syscall
@@ -128,15 +95,15 @@ _start:
     jne .file_not_exists_error   ; Jump to error handling if file doesn't exist
     
     ;; Open the file
-    mov rdi, [rsp + 16]         ; Filename provided in argv[1]
+    mov rdi, r10         ; Filename provided in argv[1]
     mov rsi, 0                  ; O_RDONLY
     mov rdx, 0                  ; Mode is ignored when opening an existing file
     mov rax, SYSOPEN            ; Syscall number for sys_open
     syscall
-    mov r8, rax                 ; Save file descriptor
+    mov r11, rax                 ; Save file descriptor
 
     ;; Read from the file
-    mov rdi, r8                 ; File descriptor
+    mov rdi, r11                 ; File descriptor
     mov rsi, buffer
     mov rdx, buffer_size
     mov rax, SYSREAD            ; Syscall number for sys_read
@@ -149,22 +116,46 @@ _start:
     call write_message
 
     ;; Close the file
-    mov rdi, r8                 ; File descriptor
+    mov rdi, r11                 ; File descriptor
     mov rax, SYSCLOSE           ; Syscall number for sys_close
     syscall
 
     call exit_success
     
 .no_argument_error:
-    ;; Print the error to stderr    
+    ;; Print usage
+    mov rdi, STDERR
+    mov rsi, usage_first
+    mov rdx, usage_first_len
+    call write_message
+    
+    mov rdi, r9
+    call get_string_length
+    mov rdx, rax
+    mov rdi, STDERR
+    mov rsi, r9
+    call write_message
+
+    mov rdi, STDERR
+    mov rsi, usage_last
+    mov rdx, usage_last_len
+    call write_message
+
+    mov rdi, STDERR
+    call write_newline
+
+    mov rdi, STDERR
+    call write_newline
+    
+    ;; Print the error
     mov rdi, STDERR
     mov rsi, no_argument_error
     mov rdx, no_argument_error_len
     call write_message
     call write_newline
 
-    jmp usage_stderr
-    
+    jmp exit_failure
+        
 .file_not_exists_error:
     ;; Print the error to stderr
     mov rdi, STDERR
