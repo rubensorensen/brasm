@@ -12,18 +12,17 @@
 %define STDOUT 1
 %define STDERR 2
 
-%define argc [rsp]
-%define argv(n) [rsp + 8 + 8*n]
-
 section .data
     buffer_size equ 4096
-    no_argument_error db 'Error: No filename provided.', 0
+    no_argument_error db "Error: No filename provided.", 0
     no_argument_error_len equ $ - no_argument_error
-    file_not_exists_error db 'Error: File does not exist.', 0
-    file_not_exists_error_len equ $ - file_not_exists_error
-    usage_first db 'usage: ', 0
+    file_not_exists_error_first db "Error: File '", 0
+    file_not_exists_error_first_len equ $ - file_not_exists_error_first
+    file_not_exists_error_last db "' does not exist.", 0
+    file_not_exists_error_last_len equ $ - file_not_exists_error_last
+    usage_first db "usage: ", 0
     usage_first_len equ $ - usage_first
-    usage_last db ' filename', 0
+    usage_last db " filename", 0
     usage_last_len equ $ - usage_last
     newline db 10
 
@@ -97,8 +96,8 @@ _start:
     mov r14, [rsp]              ; Store argv[1]
 
     ;; Persistent registers
-    ;; r12  : argc
-    ;; r13  : program name
+    ;; r12 : argc
+    ;; r13 : program name
     ;; r14 : brainfuck file name
     
     ;; Check that file exists and is readable
@@ -157,9 +156,20 @@ _start:
     call .usage
     call write_newline
     
-    mov rsi, file_not_exists_error
-    mov rdx, file_not_exists_error_len
+    mov rsi, file_not_exists_error_first
+    mov rdx, file_not_exists_error_first_len
     call write_message
+
+    mov rsi, r14
+    call get_string_length
+    mov rdx, rax
+    mov rsi, r14
+    call write_message
+    
+    mov rsi, file_not_exists_error_last
+    mov rdx, file_not_exists_error_last_len
+    call write_message
+    
     call write_newline
     
     jmp exit_failure    
